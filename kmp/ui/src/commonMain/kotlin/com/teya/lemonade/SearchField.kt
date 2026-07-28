@@ -6,8 +6,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +21,8 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
@@ -30,11 +36,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import com.teya.lemonade.core.LemonadeButtonSize
+import com.teya.lemonade.core.LemonadeButtonType
+import com.teya.lemonade.core.LemonadeButtonVariant
+import com.teya.lemonade.core.LemonadeIconButtonShape
 import com.teya.lemonade.core.LemonadeIcons
+
+private const val SEARCH_FIELD_ANIMATION_MILLIS = 150
+
+private val SearchFieldFadeSpec = tween<Float>(
+    durationMillis = SEARCH_FIELD_ANIMATION_MILLIS,
+    easing = EaseInOut,
+)
+
+// Same curve as the fade, but typed for the size animation. Without it `expandHorizontally` and
+// `shrinkHorizontally` fall back to their default spring and the width drifts out of step with the
+// opacity and scale.
+private val SearchFieldSizeSpec = tween<IntSize>(
+    durationMillis = SEARCH_FIELD_ANIMATION_MILLIS,
+    easing = EaseInOut,
+)
+
+// The cancel button pops in from — and collapses back to — slightly under its full size, so the
+// entrance reads as the button growing into the gap the field gives up rather than blinking in.
+private const val CANCEL_BUTTON_COLLAPSED_SCALE = 0.8f
+
+// The field takes the row's spare width but is not forced to fill it, so on a wide layout it stops
+// stretching into a full-bleed bar with the cancel button marooned at the far edge. The floor keeps
+// it from collapsing onto its placeholder when the content is short.
+private val SEARCH_FIELD_MIN_WIDTH = 240.dp
 
 /**
  * Input field designated to use for search and querying.
@@ -52,12 +89,136 @@ import com.teya.lemonade.core.LemonadeIcons
  * @param onInputChanged - Callback to be invoked when the input changes.
  * @param placeholder - optional [String] to be displayed as the component's placeholder text.
  * @param onInputClear - Callback to be invoked when the user request the input to be cleared.
+ * @param dismissible - [Boolean] flag controlling the trailing cancel button, on by default. The
+ * button shows up as soon as there is something to dismiss (the field is focused or holds input),
+ * and tapping it hides the keyboard, clears the focus and empties the input. Turn it off for hosts
+ * that already provide their own dismissal affordance.
+ * @param onCancel - Callback to be invoked after the search has been dismissed through the cancel
+ * button. The input has already been emptied by the time this runs, so use it to drop whatever the
+ * query was driving, such as results or a filter. Note that the order in which this and
+ * [onInputChanged] fire is not guaranteed — SwiftUI delivers the input change through the view
+ * update, so do not depend on one having run when the other does.
+ * @param cancelContentDescription - optional [String] content description for the cancel button, for
+ * accessibility. The component leaves it unset by default so the label can be localised by the
+ * consumer; supply one whenever the field is [dismissible].
  * @param interactionSource - [MutableInteractionSource] to be applied to the component.
  * @param keyboardActions - [KeyboardActions] to be applied to the component.
  * @param keyboardOptions - [KeyboardOptions] to be applied to the component.
  * @param enabled - [Boolean] flag to enable or disable the component. This will affect component opacity.
  * @param modifier - [Modifier] to be applied to the component.
  */
+@Suppress("LongParameterList")
+@Composable
+@ExperimentalLemonadeComponent
+public fun LemonadeUi.SearchField(
+    input: String,
+    onInputChanged: (String) -> Unit,
+    placeholder: String? = null,
+    onInputClear: () -> Unit = { onInputChanged("") },
+    dismissible: Boolean = true,
+    onCancel: () -> Unit = {},
+    cancelContentDescription: String? = null,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    keyboardActions: KeyboardActions = KeyboardActions(),
+    keyboardOptions: KeyboardOptions = KeyboardOptions(),
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier,
+    ) {
+        CoreSearchField(
+            input = input,
+            onInputChanged = onInputChanged,
+            placeholder = placeholder,
+            onInputClear = onInputClear,
+            interactionSource = interactionSource,
+            keyboardActions = keyboardActions,
+            keyboardOptions = keyboardOptions,
+            enabled = enabled,
+            modifier = Modifier
+                .defaultMinSize(minWidth = SEARCH_FIELD_MIN_WIDTH)
+                .weight(weight = 1f, fill = false)
+                .clearFocusOnKeyboardDismiss(),
+        )
+
+        if (dismissible) {
+            SearchCancelButton(
+                input = input,
+                onInputChanged = onInputChanged,
+                onCancel = onCancel,
+                contentDescription = cancelContentDescription,
+                interactionSource = interactionSource,
+                enabled = enabled,
+            )
+        }
+    }
+}
+
+// Split out so the focus subscription lives in a leaf recomposition scope: reading it here means a
+// focus toggle recomposes the button alone, not the whole [SearchField] body. Skipped entirely when
+// the field is not dismissible, so opting out costs no collector and no transition.
+@Composable
+private fun SearchCancelButton(
+    input: String,
+    onInputChanged: (String) -> Unit,
+    onCancel: () -> Unit,
+    contentDescription: String?,
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean,
+) {
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    val focusManager = LocalFocusManager.current
+
+    // The cancel button only earns its space once there is something to dismiss: an active focus or
+    // a query already typed in. That mirrors the Figma states, where the resting empty field is the
+    // only one without it.
+    AnimatedVisibility(
+        visible = enabled && (isFocused || input.isNotEmpty()),
+        enter = fadeIn(animationSpec = SearchFieldFadeSpec) +
+            scaleIn(
+                animationSpec = SearchFieldFadeSpec,
+                initialScale = CANCEL_BUTTON_COLLAPSED_SCALE,
+            ) + expandHorizontally(animationSpec = SearchFieldSizeSpec),
+        exit = fadeOut(animationSpec = SearchFieldFadeSpec) +
+            scaleOut(
+                animationSpec = SearchFieldFadeSpec,
+                targetScale = CANCEL_BUTTON_COLLAPSED_SCALE,
+            ) + shrinkHorizontally(animationSpec = SearchFieldSizeSpec),
+    ) {
+        LemonadeUi.IconButton(
+            icon = LemonadeIcons.Times,
+            contentDescription = contentDescription,
+            onClick = {
+                // `clearFocus` is what dismisses the keyboard too — it is the single dismissal
+                // idiom this module already uses (see the TopBar search leading icon).
+                focusManager.clearFocus()
+                // Deliberately not routed through `onInputClear`: that callback belongs to the
+                // inner clear icon, and a consumer who overrides it to only log would otherwise
+                // stop cancel from emptying the field.
+                onInputChanged("")
+                onCancel()
+            },
+            variant = LemonadeButtonVariant.Neutral,
+            type = LemonadeButtonType.Solid,
+            size = LemonadeButtonSize.Small,
+            shape = LemonadeIconButtonShape.Circular,
+            // The gap lives inside the animated content so that it collapses together with the
+            // button instead of leaving a permanent trailing gutter next to the field.
+            modifier = Modifier.padding(start = LocalSpaces.current.spacing200),
+        )
+    }
+}
+
+// Kept only to preserve the binary symbol released before the cancel button existed. It delegates
+// with the current defaults, so already-compiled callers pick the cancel button up on upgrade just
+// like a recompiled one would. No `replaceWith`: a HIDDEN deprecation is invisible to source
+// resolution, so the quick-fix would never be offered.
+@Deprecated(
+    message = "Use the overload with dismissible, onCancel and cancelContentDescription parameters.",
+    level = DeprecationLevel.HIDDEN,
+)
 @Composable
 @ExperimentalLemonadeComponent
 public fun LemonadeUi.SearchField(
@@ -71,7 +232,7 @@ public fun LemonadeUi.SearchField(
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    CoreSearchField(
+    SearchField(
         input = input,
         onInputChanged = onInputChanged,
         placeholder = placeholder,
@@ -80,7 +241,7 @@ public fun LemonadeUi.SearchField(
         keyboardActions = keyboardActions,
         keyboardOptions = keyboardOptions,
         enabled = enabled,
-        modifier = modifier.clearFocusOnKeyboardDismiss(),
+        modifier = modifier,
     )
 }
 
@@ -244,14 +405,10 @@ private fun CoreSearchFieldDecorationBox(
             }
         }
 
-        val clearButtonAnimationSpec = tween<Float>(
-            durationMillis = 150,
-            easing = EaseInOut,
-        )
         AnimatedVisibility(
             visible = input.isNotEmpty() && enabled,
-            enter = fadeIn(animationSpec = clearButtonAnimationSpec),
-            exit = fadeOut(animationSpec = clearButtonAnimationSpec),
+            enter = fadeIn(animationSpec = SearchFieldFadeSpec),
+            exit = fadeOut(animationSpec = SearchFieldFadeSpec),
         ) {
             LemonadeUi.Icon(
                 icon = LemonadeIcons.CircleXSolid,
@@ -271,7 +428,12 @@ private fun CoreSearchFieldDecorationBox(
 private data class SearchFieldPreviewData(
     val withContent: Boolean,
     val enabled: Boolean,
-)
+) {
+    // Previews never hold focus, so the cancel button is only on screen for the enabled-with-content
+    // case. Turning it on elsewhere would render a duplicate of an existing variant, so this is
+    // derived rather than a third axis.
+    val dismissible: Boolean get() = withContent && enabled
+}
 
 private class SearchFieldPreviewProvider : PreviewParameterProvider<SearchFieldPreviewData> {
     override val values: Sequence<SearchFieldPreviewData> = buildAllVariants()
@@ -302,10 +464,13 @@ private fun LemonadeSearchFieldPreview(
         onInputChanged = { /* Nothing */ },
         placeholder = "This is a placeholder",
         enabled = previewData.enabled,
+        dismissible = previewData.dismissible,
+        cancelContentDescription = "Cancel search",
         input = if (previewData.withContent) {
             "Sample text"
         } else {
             ""
         },
+        modifier = Modifier.fillMaxWidth(),
     )
 }

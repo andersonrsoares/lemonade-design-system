@@ -5,6 +5,8 @@ struct SearchFieldDisplayView: View {
     @State private var searchText1 = ""
     @State private var searchText2 = "Sample search"
     @State private var searchText3 = ""
+    @State private var searchText4 = ""
+    @State private var searchText5 = ""
 
     var body: some View {
         ScrollView {
@@ -45,6 +47,31 @@ struct SearchFieldDisplayView: View {
                                 .foregroundStyle(.content.contentSecondary)
                         }
                     }
+                }
+
+                // Cancel Callback
+                sectionView(title: "Cancel Callback") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        LemonadeUi.SearchField(
+                            input: $searchText4,
+                            placeholder: "Search and cancel...",
+                            onCancel: { print("Search dismissed") },
+                            cancelContentDescription: "Cancel search"
+                        )
+
+                        Text("Cancelling drops the focus, hides the keyboard and empties the field. onCancel then runs for whatever the query was driving.")
+                            .font(.caption)
+                            .foregroundStyle(.content.contentSecondary)
+                    }
+                }
+
+                // Not Dismissible
+                sectionView(title: "Not Dismissible") {
+                    LemonadeUi.SearchField(
+                        input: $searchText5,
+                        placeholder: "No cancel button...",
+                        dismissible: false
+                    )
                 }
 
                 // Disabled
