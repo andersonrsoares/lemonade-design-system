@@ -52,6 +52,7 @@ import androidx.compose.ui.window.DialogProperties
  * - The dialog surface uses [LemonadeTheme.radius.radius400] for rounded corners.
  * - Background color is [LemonadeTheme.colors.background.bgDefault].
  * - Tonal elevation is set to 0.dp; the dialog relies on Lemonade color tokens for visual hierarchy.
+ * - The dialog keeps whichever system bars the host window hides, never shows one the host hides.
  * - For overlay components with a unified visibility API, see also [LemonadeUi.Dropdown] and
  *   [LemonadeUi.BottomSheet], which share the same `expanded` flag pattern.
  *
@@ -68,6 +69,8 @@ public fun LemonadeUi.Dialog(
     dismissOnBackPress: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    val mirrorSystemBars = systemBarsMirror()
+
     if (expanded) {
         BasicAlertDialog(
             onDismissRequest = onDismissRequest,
@@ -76,6 +79,7 @@ public fun LemonadeUi.Dialog(
                 dismissOnBackPress = dismissOnBackPress,
             ),
         ) {
+            mirrorSystemBars()
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(size = LemonadeTheme.radius.radius400),
