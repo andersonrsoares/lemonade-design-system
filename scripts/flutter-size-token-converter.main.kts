@@ -12,7 +12,7 @@ private data class SizeToken(
 )
 
 fun main() {
-    val sizeTokensFile = File("tokens/size.json")
+    val sizeTokensFile = tokenFile("size.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
 
     try {
@@ -49,6 +49,7 @@ fun main() {
         println("✓ Converted ${sizeTokensFile.path} -> ${outputFile.path}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${sizeTokensFile.path}: ${error.message}")
+        throw error
     }
 }
 

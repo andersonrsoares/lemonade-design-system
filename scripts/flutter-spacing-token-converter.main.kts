@@ -12,7 +12,7 @@ private data class SpacingToken(
 )
 
 fun main() {
-    val spacingTokensFile = File("tokens/spacing.json")
+    val spacingTokensFile = tokenFile("spacing.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
 
     try {
@@ -49,6 +49,7 @@ fun main() {
         println("✓ Converted ${spacingTokensFile.path} -> ${outputFile.path}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${spacingTokensFile.path}: ${error.message}")
+        throw error
     }
 }
 

@@ -9,7 +9,7 @@ private data class OpacityResource(
 )
 
 fun main() {
-    val inputFile = File("tokens/opacity.json")
+    val inputFile = tokenFile("opacity.tokens.json")
     val outputDir = File("swiftui/Sources/Lemonade")
     try {
         if (!inputFile.exists() || !inputFile.isFile) {
@@ -27,7 +27,7 @@ fun main() {
                     opacityValue = jsonObject.getDouble("resolvedValue"),
                 )
             },
-        ).sortedBy { it.value.opacityValue }
+        ).sortedWith(compareBy({ it.value.opacityValue }, { it.name }))
         println("✓ Opacities read and parsed.")
 
         val fullOpacityCode = generateFullOpacityCode(
@@ -40,6 +40,7 @@ fun main() {
         println("✓ Converted ${inputFile.name} -> ${outputTokenFile.name}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${inputFile.name}: ${error.message}")
+        throw error
     }
 }
 

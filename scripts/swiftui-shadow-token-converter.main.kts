@@ -32,7 +32,7 @@ data class ShadowResource(
 )
 
 fun main() {
-    val shadowTokensFile = File("tokens/shadow.json")
+    val shadowTokensFile = tokenFile("shadow.tokens.json")
     val outputDir = File("swiftui/Sources/Lemonade")
 
     try {
@@ -73,6 +73,7 @@ fun main() {
         println("✓ Shadow file created")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${shadowTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 
@@ -83,7 +84,7 @@ private fun List<ResourceData<ShadowResourceValue>>.toShadowResource(): List<Sha
         .sortedBy { (groupName, _) -> shadowGroupOrder.indexOf(groupName).takeIf { it >= 0 } ?: Int.MAX_VALUE }
         .map { (groupName, resources) ->
             val groupLevels = resources.groupBy { groupResource -> groupResource.groups[2] }
-            val levels = groupLevels.map { (_, levelResources) ->
+            val levels = groupLevels.entries.sortedBy { (levelName, _) -> levelName }.map { (_, levelResources) ->
                 var levelResource = ShadowResource()
                 levelResources.forEach { resourceValue ->
                     levelResource = when {

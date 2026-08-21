@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Generate platform token code (KMP + SwiftUI) from tokens/*.json.
+# Generate platform token code (KMP + SwiftUI) from tokens/*.tokens.json.
 #
 # Usage (run from the repo root):
-#   .claude/skills/generate-tokens/scripts/run-converters.sh [--changed | --all | <file.json>...]
+#   .claude/skills/generate-tokens/scripts/run-converters.sh [--changed | --all | <file.tokens.json>...]
 #
-#   --changed   (default) run converters only for tokens/*.json changed vs HEAD
+#   --changed   (default) run converters only for tokens/*.tokens.json changed vs HEAD
 #   --all       run every converter
-#   <file>...   run converters for the named token files (e.g. theme-colors.json radius.json)
+#   <file>...   run converters for the named token files (e.g. theme-colors.light.tokens.json radius.tokens.json)
 #
 # Requires Kotlin 2.3.20 — Homebrew's 2.4.0 crashes the .main.kts converters with
 # a FIR compiler error. This script installs 2.3.20 into ~/.local on first run
@@ -38,20 +38,21 @@ ensure_kotlin() {
 # Flutter converters are intentionally excluded — this repo generates KMP + SwiftUI only.
 converters_for() {
   case "$1" in
-    primitive-colors.json) echo "kmp-color-token-converter swiftui-color-token-converter" ;;
-    theme-colors.json)     echo "kmp-theme-token-converter swiftui-theme-token-converter swiftui-color-assets-generator" ;;
-    radius.json)           echo "kmp-radius-token-converter swiftui-radius-token-converter" ;;
-    spacing.json)          echo "kmp-spacing-token-converter swiftui-spacing-token-converter" ;;
-    size.json)             echo "kmp-dimension-token-converter swiftui-size-token-converter" ;;
-    opacity.json)          echo "kmp-opacity-token-converter swiftui-opacity-token-converter" ;;
-    border-width.json)     echo "kmp-border-width-token-converter swiftui-border-token-converter" ;;
-    shadow.json)           echo "kmp-shadow-token-converter swiftui-shadow-token-converter" ;;
-    typography.json)       echo "kmp-typography-token-converter swiftui-typography-token-converter" ;;
+    primitive-colors.tokens.json) echo "kmp-color-token-converter swiftui-color-token-converter" ;;
+    theme-colors.light.tokens.json|theme-colors.dark.tokens.json)
+                                  echo "kmp-theme-token-converter swiftui-theme-token-converter swiftui-color-assets-generator" ;;
+    radius.tokens.json)           echo "kmp-radius-token-converter swiftui-radius-token-converter" ;;
+    spacing.tokens.json)          echo "kmp-spacing-token-converter swiftui-spacing-token-converter" ;;
+    size.tokens.json)             echo "kmp-dimension-token-converter swiftui-size-token-converter" ;;
+    opacity.tokens.json)          echo "kmp-opacity-token-converter swiftui-opacity-token-converter" ;;
+    border-width.tokens.json)     echo "kmp-border-width-token-converter swiftui-border-token-converter" ;;
+    shadow.tokens.json)           echo "kmp-shadow-token-converter swiftui-shadow-token-converter" ;;
+    typography.tokens.json)       echo "kmp-typography-token-converter swiftui-typography-token-converter" ;;
     *) echo "" ;;
   esac
 }
 
-ALL_FILES="primitive-colors.json theme-colors.json radius.json spacing.json size.json opacity.json border-width.json shadow.json typography.json"
+ALL_FILES="primitive-colors.tokens.json theme-colors.light.tokens.json radius.tokens.json spacing.tokens.json size.tokens.json opacity.tokens.json border-width.tokens.json shadow.tokens.json typography.tokens.json"
 
 # Resolve the target token files from args.
 mode="${1:---changed}"
@@ -59,29 +60,30 @@ files=()
 case "$mode" in
   --all)     files=($ALL_FILES) ;;
   --changed) while IFS= read -r f; do files+=("$(basename "$f")"); done \
-               < <(git diff --name-only HEAD -- 'tokens/*.json'; git diff --cached --name-only -- 'tokens/*.json') ;;
+               < <(git diff --name-only HEAD -- 'tokens/*.tokens.json'; git diff --cached --name-only -- 'tokens/*.tokens.json') ;;
   *)         for a in "$@"; do files+=("$(basename "$a")"); done ;;
 esac
 
-# de-dupe
-files=($(printf '%s\n' "${files[@]}" | sort -u))
+# de-dupe. Guard the empty case: under `set -u` an empty array makes
+# "${files[@]}" an unbound-variable error, so --changed with no token
+# change would abort here instead of reaching the friendly message below.
+if [ "${#files[@]}" -gt 0 ]; then
+  files=($(printf '%s\n' "${files[@]}" | sort -u))
+fi
 
 if [ "${#files[@]}" -eq 0 ]; then
-  echo "No token files to process. Pass file names, --all, or change a tokens/*.json first."
+  echo "No token files to process. Pass file names, --all, or change a tokens/*.tokens.json first."
   exit 0
 fi
 
 ensure_kotlin
 
-echo "==> Token files: ${files[*]}"
+# A converter's compiled script is cached, and editing an @file:Import'ed loader
+# does NOT invalidate it — the converter would silently run the previous loader's
+# code and produce stale output that still looks freshly generated. Clear it.
+rm -rf "$HOME/Library/Caches/main.kts.compiled.cache" "$HOME/.cache/main.kts.compiled.cache"
 
-# theme-colors.json must be stripped of stray Figma modes before conversion.
-for f in "${files[@]}"; do
-  if [ "$f" = "theme-colors.json" ]; then
-    echo "==> Stripping stray modes from tokens/theme-colors.json"
-    python3 "$SKILL_DIR/strip-stray-modes.py" tokens/theme-colors.json
-  fi
-done
+echo "==> Token files: ${files[*]}"
 
 # Run each converter.
 ran=0

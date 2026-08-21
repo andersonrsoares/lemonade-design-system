@@ -9,7 +9,7 @@ private data class RadiusResource(
 )
 
 fun main() {
-    val radiusTokensFile = File("tokens/radius.json")
+    val radiusTokensFile = tokenFile("radius.tokens.json")
     val definitionOutputDir = File("kmp/core/src/commonMain/kotlin/com/teya/lemonade/core")
     val implementationOutputDir = File("kmp/tokens/src/commonMain/kotlin/com/teya/lemonade")
 
@@ -32,7 +32,7 @@ fun main() {
                     radiusValue = jsonObject.getInt("resolvedValue"),
                 )
             },
-        ).sortedBy { it.value.radiusValue }
+        ).sortedWith(compareBy({ it.value.radiusValue }, { it.name }))
         println("✓ Loaded radius resources")
 
         val definitionCode = buildRadiusDefinitionCode(
@@ -54,6 +54,7 @@ fun main() {
         println("✓ Implementation generated")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${radiusTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 

@@ -13,7 +13,7 @@ private data class BorderToken(
 )
 
 fun main() {
-    val borderTokensFile = File("tokens/border-width.json")
+    val borderTokensFile = tokenFile("border-width.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
 
     try {
@@ -56,6 +56,7 @@ fun main() {
         println("✓ Converted ${borderTokensFile.path} -> ${outputFile.path}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${borderTokensFile.path}: ${error.message}")
+        throw error
     }
 }
 

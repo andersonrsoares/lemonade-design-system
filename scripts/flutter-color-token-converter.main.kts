@@ -5,7 +5,7 @@
 import java.io.File
 
 fun main() {
-    val colorTokensFile = File("tokens/primitive-colors.json")
+    val colorTokensFile = tokenFile("primitive-colors.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
     try {
         if (!colorTokensFile.exists() || !colorTokensFile.isFile) {
@@ -37,12 +37,11 @@ fun main() {
         val outputFile = File(outputDir, "primitive_colors.dart")
         outputFile.writeText(generatedCode)
 
-        // Format the file using dart format
-        ProcessBuilder("dart", "format", outputFile.absolutePath).start().waitFor()
 
         println("✓ Converted ${colorTokensFile.name} -> ${outputFile.name}!")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${colorTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 

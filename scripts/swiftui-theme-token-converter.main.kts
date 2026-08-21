@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 fun main() {
-    val colorTokensFile = File("tokens/theme-colors.json")
+    val colorTokensFile = tokenFile("theme-colors.light.tokens.json")
     val outputDir = File("swiftui/Sources/Lemonade")
 
     try {
@@ -18,44 +18,42 @@ fun main() {
             error(message = "File $colorTokensFile does not exist in system")
         }
 
-        val fileContent = colorTokensFile.readText()
-        val json = JSONObject(fileContent)
-        val modesObject = json.getJSONObject("modes")
-        val modeKeys = modesObject.keys().asSequence().toList()
+        val themeFiles = tokenFiles("theme-colors")
+        requireModes(themeFiles, "Light", "Dark")
+        val modeNames = availableModeNames(themeFiles)
+        val lightMode = modeNames.first { it.equals("Light", ignoreCase = true) }
 
-        // Use Light mode to get the list of variables (both modes have the same keys)
-        val lightModeKey = modeKeys.first { modeKey -> modesObject.getString(modeKey).equals("Light", ignoreCase = true) }
-
-        // Read variable names to build asset name mapping
-        val variablesJson = json.getJSONArray("variables")
-        val variableAssetNames = mutableMapOf<String, String>()
-        repeat(variablesJson.length()) { index ->
-            val variable = variablesJson.getJSONObject(index)
-            if (!variable.optBoolean("hiddenFromPublishing")) {
-                val name = variable.getString("name")
-                val assetName = "lemonade-${name.split("/").joinToString("-") { it.lowercase().replace("_", "-") }}"
-                variableAssetNames[name] = assetName
-            }
+        val lightFile = themeFiles.first { file ->
+            val json = JSONObject(file.readText())
+            dtcgModeName(json).equals(lightMode, ignoreCase = true)
         }
+        val lightJson = JSONObject(lightFile.readText())
+        require(isDtcgDocument(lightJson)) { "${lightFile.path} is not a Figma native DTCG export" }
 
-        // Read resources for protocol generation and adaptive theme
+        val tokens = dtcgTokens(lightJson)
+        val tokenNames = tokens.keys
+            .sortedWith(::canonicalTokenOrder)
+            .filterNot { name ->
+                tokens.getValue(name).optJSONObject("\$extensions")
+                    ?.optBoolean("com.figma.hiddenFromPublishing") ?: false
+            }
+
         val themeResources = readFileResourceFileByMode(
-            file = colorTokensFile,
-            modeKey = lightModeKey,
+            files = themeFiles,
+            modeName = lightMode,
             resourceMap = { _ -> Unit },
         )
 
-        // Build asset name list aligned with resources (using variable order from JSON)
+        // Indexed once rather than scanned per token — first-wins, matching the
+        // previous `find` semantics if two names ever sanitize to the same value.
+        val resourcesByName = themeResources.groupBy { it.name }.mapValues { it.value.first() }
+
         val resourcesWithAssets = mutableListOf<Pair<ResourceData<Unit>, String>>()
-        repeat(variablesJson.length()) { index ->
-            val variable = variablesJson.getJSONObject(index)
-            if (!variable.optBoolean("hiddenFromPublishing")) {
-                val name = variable.getString("name")
-                val assetName = variableAssetNames[name] ?: return@repeat
-                val resource = themeResources.find { it.name == name.sanitizedSwiftValueName() }
-                if (resource != null) {
-                    resourcesWithAssets.add(resource to assetName)
-                }
+        tokenNames.forEach { name ->
+            val assetName = "lemonade-${name.split("/").joinToString("-") { it.lowercase().replace("_", "-") }}"
+            val resource = resourcesByName[name.sanitizedSwiftValueName()]
+            if (resource != null) {
+                resourcesWithAssets.add(resource to assetName)
             }
         }
 
@@ -85,6 +83,7 @@ fun main() {
     } catch (error: Throwable) {
         println("✗ Failed to convert ${colorTokensFile.name}: ${error.message}")
         error.printStackTrace()
+        throw error
     }
 }
 

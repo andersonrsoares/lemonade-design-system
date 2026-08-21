@@ -10,7 +10,7 @@ data class ThemeResourceData(
 )
 
 fun main() {
-    val colorTokensFile = File("tokens/theme-colors.json")
+    val colorTokensFile = tokenFile("theme-colors.light.tokens.json")
     val outputDir = File("flutter/lib/src")
 
     try {
@@ -74,6 +74,7 @@ fun main() {
         println("✓ Definition & Implementation files created")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${colorTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 

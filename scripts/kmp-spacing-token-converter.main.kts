@@ -9,7 +9,7 @@ data class SpacingResource(
 )
 
 fun main() {
-    val spaceTokensFile = File("tokens/spacing.json")
+    val spaceTokensFile = tokenFile("spacing.tokens.json")
     val definitionOutputDir = File("kmp/core/src/commonMain/kotlin/com/teya/lemonade/core")
     val implementationOutputDir = File("kmp/tokens/src/commonMain/kotlin/com/teya/lemonade")
 
@@ -32,7 +32,7 @@ fun main() {
                     spacingValue = jsonObject.getInt("resolvedValue"),
                 )
             },
-        ).sortedBy { it.value.spacingValue }
+        ).sortedWith(compareBy({ it.value.spacingValue }, { it.name }))
         println("✓ Loaded space resources")
 
         val definitionCode = buildSpacingDefinitionCode(
@@ -54,6 +54,7 @@ fun main() {
         println("✓ Implementation generated")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${spaceTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 

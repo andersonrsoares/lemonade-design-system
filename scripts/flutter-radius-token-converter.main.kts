@@ -12,7 +12,7 @@ private data class RadiusToken(
 )
 
 fun main() {
-    val radiusTokensFile = File("tokens/radius.json")
+    val radiusTokensFile = tokenFile("radius.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
 
     try {
@@ -58,6 +58,7 @@ fun main() {
         println("✓ Converted ${radiusTokensFile.path} -> ${shapesOutputFile.path}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${radiusTokensFile.path}: ${error.message}")
+        throw error
     }
 }
 

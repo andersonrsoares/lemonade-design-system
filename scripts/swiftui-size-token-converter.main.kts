@@ -9,7 +9,7 @@ data class SizeResource(
 )
 
 fun main() {
-    val sizeTokensFile = File("tokens/size.json")
+    val sizeTokensFile = tokenFile("size.tokens.json")
     val outputDir = File("swiftui/Sources/Lemonade")
 
     try {
@@ -27,7 +27,7 @@ fun main() {
                     sizeValue = jsonObject.getInt("resolvedValue"),
                 )
             },
-        ).sortedBy { it.value.sizeValue }
+        ).sortedWith(compareBy({ it.value.sizeValue }, { it.name }))
         println("✓ Loaded size resources")
 
         val code = buildSizeCode(
@@ -41,6 +41,7 @@ fun main() {
         println("✓ Implementation generated")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${sizeTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 

@@ -12,7 +12,7 @@ private data class OpacityToken(
 )
 
 fun main() {
-    val opacityTokensFile = File("tokens/opacity.json")
+    val opacityTokensFile = tokenFile("opacity.tokens.json")
     val outputDir = File("flutter/lib/src/foundation")
 
     try {
@@ -51,6 +51,7 @@ fun main() {
         println("✓ Converted ${opacityTokensFile.path} -> ${outputFile.path}")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${opacityTokensFile.path}: ${error.message}")
+        throw error
     }
 }
 

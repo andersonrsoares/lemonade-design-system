@@ -9,7 +9,7 @@ data class BorderWidthResource(
 )
 
 fun main() {
-    val borderWidthTokensFile = File("tokens/border-width.json")
+    val borderWidthTokensFile = tokenFile("border-width.tokens.json")
     val implementationOutputDir = File("kmp/tokens/src/commonMain/kotlin/com/teya/lemonade")
 
     try {
@@ -27,7 +27,7 @@ fun main() {
                     borderWidthValue = jsonObject.getDouble("resolvedValue").toFloat(),
                 )
             },
-        ).sortedBy { it.value.borderWidthValue }
+        ).sortedWith(compareBy({ it.value.borderWidthValue }, { it.name }))
         println("✓ Loaded border width resources")
 
         val implementationCode = buildFullImplementationFile(
@@ -41,6 +41,7 @@ fun main() {
         println("✓ Implementation generated")
     } catch (error: Throwable) {
         println("✗ Failed to convert ${borderWidthTokensFile.name}: ${error.message}")
+        throw error
     }
 }
 
