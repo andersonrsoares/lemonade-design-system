@@ -167,7 +167,7 @@ struct LemonadeToastContainerView<Content: View>: View {
 
     @ViewBuilder
     private var toastOverlay: some View {
-        if let toast = displayedToast, animationPhase.isPresented {
+        if let toast = toastToRender, animationPhase.isPresented {
             ToastItemView(
                 toast: toast,
                 onDismiss: { toastManager.dismiss() },
@@ -188,6 +188,24 @@ struct LemonadeToastContainerView<Content: View>: View {
             // Separate animation for drag (snappier)
             .animation(ToastAnimationConfig.interactiveSpring, value: dragOffset)
         }
+    }
+
+    /// The toast to draw, chosen by identity rather than by animation phase.
+    ///
+    /// A manager holding the same `id` we are showing has replaced that toast's content in place
+    /// — `LemonadeToastPolicy.replace` — so the update is drawn where the pill stands, with no
+    /// transition. A different `id` means a transition is running or is about to start, and until
+    /// `enterNewToast` swaps it in, the toast on screen is still the one that must be drawn.
+    ///
+    /// Deliberately not switched on `animationPhase`: SwiftUI computes `body` before running the
+    /// `onChange` that starts the exit, so an incoming toast would be rendered for a frame before
+    /// the phase caught up — a flash of the new content, then the old one fading over it.
+    private var toastToRender: LemonadeToastItem? {
+        guard let displayedToast else { return toastManager.currentToast }
+        guard let current = toastManager.currentToast, current.id == displayedToast.id else {
+            return displayedToast
+        }
+        return current
     }
 
     // MARK: - Drag Gesture Handling
