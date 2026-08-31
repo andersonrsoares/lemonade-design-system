@@ -71,6 +71,28 @@ public enum LemonadeToastDuration: Sendable, Equatable {
     }
 }
 
+// MARK: - Toast Policy
+
+/// How a `show(_:)` call behaves when a toast is already on screen.
+public enum LemonadeToastPolicy: Sendable, Equatable {
+    /// Wait for the visible toast, then take its place. Every message is seen, in call order.
+    ///
+    /// Suits toasts that each report a distinct outcome the user should not miss. It does mean a
+    /// burst of calls plays back after the burst itself has ended, since each toast is held for
+    /// `ToastAnimationConfig.minimumVisible` before the next may replace it.
+    case queue
+
+    /// Supersede the visible toast, and drop anything queued behind it.
+    ///
+    /// Suits a repeated action reporting its running state — a till adding items to a basket —
+    /// where only the newest message is worth reading and a backlog would outlive the taps that
+    /// produced it. Compose and Flutter behave this way for every toast, having no queue at all.
+    ///
+    /// The queue is cleared rather than kept, so nothing older can surface after the message that
+    /// replaced it.
+    case replace
+}
+
 // MARK: - Toast Item
 
 /// Represents a toast notification to be displayed.
@@ -109,6 +131,25 @@ public struct LemonadeToastItem: Identifiable, Equatable, Sendable {
 
     public static func == (lhs: LemonadeToastItem, rhs: LemonadeToastItem) -> Bool {
         lhs.id == rhs.id
+    }
+
+    /// This toast's content under an existing toast's identity.
+    ///
+    /// The container keys its transitions on `id`, so reusing one makes a replacement land as an
+    /// update to the toast already on screen — the pill keeps its place and its text changes —
+    /// rather than a fade out and a fresh entry animation.
+    func adoptingIdentity(of other: LemonadeToastItem) -> LemonadeToastItem {
+        LemonadeToastItem(
+            id: other.id,
+            label: label,
+            voice: voice,
+            icon: icon,
+            duration: duration,
+            isDismissible: isDismissible,
+            actionLabel: actionLabel,
+            onAction: onAction,
+            paddingValues: paddingValues
+        )
     }
 }
 
@@ -183,6 +224,9 @@ public final class LemonadeToastManager: ObservableObject {
     ///     tell "unset" from "explicitly zero" on a plain `EdgeInsets`). The top inset is never honored —
     ///     the toast is always bottom-anchored with intrinsic height, so it has no visible effect.
     ///     Defaults to `nil` (standard margins on every edge).
+    ///   - policy: What to do when a toast is already on screen — wait behind it (`.queue`, the
+    ///     default, preserving existing behaviour) or supersede it and drop anything queued
+    ///     (`.replace`).
     ///
     /// Use `.loading` to communicate an ongoing action (e.g. "Downloading your document…"). A loading
     /// toast shows a spinner and persists until you call ``dismiss()`` or replace it with another `show`.
@@ -194,7 +238,8 @@ public final class LemonadeToastManager: ObservableObject {
         dismissible: Bool = true,
         actionLabel: String? = nil,
         onAction: (@MainActor @Sendable () -> Void)? = nil,
-        paddingValues: EdgeInsets? = nil
+        paddingValues: EdgeInsets? = nil,
+        policy: LemonadeToastPolicy = .queue
     ) {
         let toast = LemonadeToastItem(
             label: label,
@@ -208,11 +253,22 @@ public final class LemonadeToastManager: ObservableObject {
             paddingValues: paddingValues
         )
 
-        if currentToast != nil {
-            // Queue the new toast and dismiss current after delay
+        switch policy {
+        case .replace:
+            // Anything still queued is older than this toast, so it is no longer worth showing —
+            // left in place it would surface after the message meant to supersede it.
+            //
+            // Deliberately not `dismiss()`: that promotes a queued toast into the slot we are
+            // about to overwrite, consuming it unseen.
+            pendingToasts.removeAll()
+            // Reuse the visible toast's identity so its content is updated where it stands. Going
+            // through `displayToast` either way restarts the dismissal timer, so the replacement
+            // gets its own full duration rather than inheriting what was left of the old one.
+            displayToast(currentToast.map(toast.adoptingIdentity(of:)) ?? toast)
+        case .queue where currentToast != nil:
             pendingToasts.append(toast)
             scheduleTransition()
-        } else {
+        case .queue:
             displayToast(toast)
         }
     }
