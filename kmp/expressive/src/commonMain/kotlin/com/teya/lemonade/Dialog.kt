@@ -1,6 +1,8 @@
 package com.teya.lemonade
 
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +26,21 @@ import androidx.compose.ui.window.DialogProperties
  *   and [dismissOnBackPress]).
  * @param dismissOnClickOutside Whether tapping outside the dialog dismisses it. Defaults to `true`.
  * @param dismissOnBackPress Whether pressing the back button dismisses the dialog. Defaults to `true`.
+ * @param sizeToContent Whether the dialog takes the width of its content rather than the
+ *   platform's default dialog width. Defaults to `false`, which is the right choice for the
+ *   text-and-buttons dialogs that width was sized for, and keeps every dialog a familiar size.
+ *   Pass `true` for content that carries a width of its own, such as a side-by-side picker on a
+ *   landscape phone or a tablet — the content must have a width of its own rather than filling
+ *   whatever it is given.
+ *
+ *   The content decides only between 280.dp and 560.dp: [BasicAlertDialog] clamps to that range
+ *   whatever this is set to. Anything narrower is padded out to 280.dp, and anything wider is
+ *   clipped at 560.dp rather than growing, so content approaching that ceiling has little room
+ *   left for a larger font scale or a longer translation.
+ *
+ *   Sizing to the content means measuring its intrinsic width, which not every layout can answer:
+ *   a `LazyColumn`, `LazyRow` or anything else built on `SubcomposeLayout` throws when asked. Keep
+ *   this `false` for content that scrolls lazily.
  * @param content A composable lambda that defines the dialog's content.
  *
  * ## Usage Example
@@ -67,6 +84,7 @@ public fun LemonadeUi.Dialog(
     onDismissRequest: () -> Unit,
     dismissOnClickOutside: Boolean = true,
     dismissOnBackPress: Boolean = true,
+    sizeToContent: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val mirrorSystemBars = systemBarsMirror()
@@ -77,11 +95,20 @@ public fun LemonadeUi.Dialog(
             properties = DialogProperties(
                 dismissOnClickOutside = dismissOnClickOutside,
                 dismissOnBackPress = dismissOnBackPress,
+                usePlatformDefaultWidth = !sizeToContent,
             ),
         ) {
             mirrorSystemBars()
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                // A platform-width dialog fills what it is granted. One sized by its content is
+                // measured at its widest child instead — filling here, or leaving the width
+                // unconstrained, would stretch it to the screen edges and the content would decide
+                // nothing. Callers keep filling the width they are given either way.
+                modifier = if (sizeToContent) {
+                    Modifier.width(intrinsicSize = IntrinsicSize.Max)
+                } else {
+                    Modifier.fillMaxWidth()
+                },
                 shape = RoundedCornerShape(size = LemonadeTheme.radius.radius400),
                 color = LemonadeTheme.colors.background.bgDefault,
                 tonalElevation = 0.dp,
@@ -89,4 +116,30 @@ public fun LemonadeUi.Dialog(
             )
         }
     }
+}
+
+/**
+ * Binary-compatibility shim for the signature that shipped before [sizeToContent] was added. Kept
+ * so the released symbol survives; see the binary-compatibility skill.
+ */
+@Deprecated(
+    message = "Binary compatibility only.",
+    level = DeprecationLevel.HIDDEN,
+)
+@Composable
+public fun LemonadeUi.Dialog(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    dismissOnClickOutside: Boolean = true,
+    dismissOnBackPress: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Dialog(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        dismissOnClickOutside = dismissOnClickOutside,
+        dismissOnBackPress = dismissOnBackPress,
+        sizeToContent = false,
+        content = content,
+    )
 }
